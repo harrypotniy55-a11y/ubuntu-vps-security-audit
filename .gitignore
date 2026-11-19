@@ -1,0 +1,17 @@
+# Local audit reports
+audit-report.txt
+*.audit-report.txt
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+*.old
+
+# Logs
+*.log
+
+# Editor files
+.vscode/
+.idea/
+*~
