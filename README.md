@@ -1,3 +1,5 @@
+🇷🇺 Русский | 🇬🇧 [English](README_EN.md)
+
 # 🛡️ Ubuntu VPS Security Audit
 
 **Простой аудит безопасности Ubuntu VPS без установки дополнительных программ.**
