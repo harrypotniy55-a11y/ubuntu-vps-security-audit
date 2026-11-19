@@ -1,3 +1,5 @@
+🇬🇧 English | 🇷🇺 [Русский](README.md)
+
 # 🛡️ Ubuntu VPS Security Audit
 
 **A lightweight, non-invasive security audit script for Ubuntu VPS.**
