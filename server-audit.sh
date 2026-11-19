@@ -1,7 +1,6 @@
-
 #!/usr/bin/env bash
 
-# Ubuntu VPS Security Audit 1.1
+# Ubuntu VPS Security Audit 1.2
 # Non-invasive security audit for Ubuntu 22.04 / 24.04
 # Does not modify system configuration or service settings.
 
@@ -66,7 +65,7 @@ info() {
 }
 
 echo "############################################################"
-echo "#                 VPS SECURITY AUDIT 1.1                   #"
+echo "#                 VPS SECURITY AUDIT 1.2                   #"
 echo "############################################################"
 echo "Дата: $(date -Is)"
 echo "Сервер: $(hostname -f 2>/dev/null || hostname)"
@@ -203,7 +202,7 @@ if [ -n "$LOGIN_FILE" ]; then
                 ANSWER="${ANSWER#"${ANSWER%%[![:space:]]*}"}"
                 ANSWER="${ANSWER%"${ANSWER##*[![:space:]]}"}"
 
-                # Normalize Latin letters. Russian variants are handled below.
+                # Normalize Latin letters.
                 ANSWER=$(printf '%s' "$ANSWER" | tr '[:upper:]' '[:lower:]')
 
                 case "$ANSWER" in
@@ -212,13 +211,14 @@ if [ -n "$LOGIN_FILE" ]; then
                         break
                         ;;
 
-                    n|no|н|Н|нет|Нет|нЕт|неТ|НЕт|НЕТ)
+                    n|no|н|Н|нет|Нет|неТ|нЕт|нЕТ|НеТ|НЕт|НЕТ)
                         warning "Пользователь не подтвердил успешный SSH-вход с IP: $IP"
                         break
                         ;;
 
                     *)
-                        echo "[ИНФО] Непонятный ответ. Введи y/yes/д/да или n/no/н/нет."
+                        echo "[ИНФО] Непонятный ответ."
+                        echo "Введи y/yes/д/да или n/no/н/нет."
                         ;;
                 esac
             done
@@ -348,14 +348,58 @@ fi
 section "14. ЦЕЛОСТНОСТЬ ПАКЕТОВ"
 
 if command -v dpkg >/dev/null 2>&1; then
+
     DPKG_CHANGES=$(dpkg -V 2>&1 || true)
 
-    if [ -n "$DPKG_CHANGES" ]; then
-        printf '%s\n' "$DPKG_CHANGES" | head -n 150
-        warning "dpkg обнаружил отличия в проверяемых файлах пакетов. Изучите вывод выше."
-    else
+    if [ -z "$DPKG_CHANGES" ]; then
         info "dpkg -V не обнаружил отличий в проверяемых файлах пакетов."
+    else
+        echo "Обнаруженные отличия:"
+        printf '%s\n' "$DPKG_CHANGES"
+
+        CONFIG_CHANGES=()
+        OTHER_CHANGES=()
+        MISSING_FILES=()
+
+        while IFS= read -r LINE; do
+            [ -n "$LINE" ] || continue
+
+            if [[ "$LINE" == *"missing"* ]]; then
+                MISSING_FILES+=("$LINE")
+
+            elif [[ "$LINE" =~ ^.{9}[[:space:]]+c[[:space:]] ]]; then
+                CONFIG_CHANGES+=("$LINE")
+
+            else
+                OTHER_CHANGES+=("$LINE")
+            fi
+        done <<< "$DPKG_CHANGES"
+
+        echo
+        echo "РЕЗУЛЬТАТ АНАЛИЗА:"
+
+        if [ "${#CONFIG_CHANGES[@]}" -gt 0 ]; then
+            echo
+            echo "Изменённые конфигурационные файлы:"
+            printf '%s\n' "${CONFIG_CHANGES[@]}"
+            info "Изменения конфигураций сами по себе не считаются признаком взлома."
+        fi
+
+        if [ "${#MISSING_FILES[@]}" -gt 0 ]; then
+            echo
+            echo "Отсутствующие файлы:"
+            printf '%s\n' "${MISSING_FILES[@]}"
+            warning "Обнаружены отсутствующие файлы пакетов. Проверьте, не удалены ли они намеренно."
+        fi
+
+        if [ "${#OTHER_CHANGES[@]}" -gt 0 ]; then
+            echo
+            echo "Другие отличия:"
+            printf '%s\n' "${OTHER_CHANGES[@]}"
+            warning "Обнаружены отличия в файлах пакетов, не классифицированных как конфигурационные. Требуется проверка."
+        fi
     fi
+
 else
     limitation "Команда dpkg не найдена."
 fi
@@ -412,6 +456,15 @@ if [ "$WARNINGS" -gt 0 ]; then
 
     echo
     echo "Необходимо проверить указанные выше разделы."
+
+elif [ "$LIMITATIONS" -gt 0 ]; then
+    echo
+    echo "############################################################"
+    echo "#             ПРОВЕРКА ВЫПОЛНЕНА НЕ ПОЛНОСТЬЮ             #"
+    echo "############################################################"
+
+    echo "Некоторые проверки не удалось выполнить или их данные ограничены."
+
 else
     echo
     echo "############################################################"
