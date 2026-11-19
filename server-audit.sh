@@ -1,6 +1,7 @@
+
 #!/usr/bin/env bash
 
-# Ubuntu VPS Security Audit 1.0
+# Ubuntu VPS Security Audit 1.1
 # Non-invasive security audit for Ubuntu 22.04 / 24.04
 # Does not modify system configuration or service settings.
 
@@ -18,6 +19,10 @@ WARNINGS=0
 LIMITATIONS=0
 LOGIN_FILE=""
 
+CURRENT_SECTION="Начало проверки"
+WARNINGS_LIST=()
+LIMITATIONS_LIST=()
+
 # Report and terminal output.
 if ! touch "$REPORT"; then
     echo "ERROR: Не удалось создать отчёт: $REPORT"
@@ -34,6 +39,8 @@ cleanup() {
 trap cleanup EXIT
 
 section() {
+    CURRENT_SECTION="$1"
+
     echo
     echo "============================================================"
     echo " $1"
@@ -42,11 +49,15 @@ section() {
 
 warning() {
     WARNINGS=$((WARNINGS + 1))
+    WARNINGS_LIST+=("$CURRENT_SECTION: $1")
+
     echo "[ПРЕДУПРЕЖДЕНИЕ] $1"
 }
 
 limitation() {
     LIMITATIONS=$((LIMITATIONS + 1))
+    LIMITATIONS_LIST+=("$CURRENT_SECTION: $1")
+
     echo "[ОГРАНИЧЕНИЕ ПРОВЕРКИ] $1"
 }
 
@@ -55,7 +66,7 @@ info() {
 }
 
 echo "############################################################"
-echo "#                 VPS SECURITY AUDIT 1.0                   #"
+echo "#                 VPS SECURITY AUDIT 1.1                   #"
 echo "############################################################"
 echo "Дата: $(date -Is)"
 echo "Сервер: $(hostname -f 2>/dev/null || hostname)"
@@ -177,20 +188,40 @@ if [ -n "$LOGIN_FILE" ]; then
         for IP in "${IPS[@]}"; do
             echo
             echo "Успешный вход с IP: $IP"
-            printf '%s\n' "Это был ты? (y/n):"
-            IFS= read -r ANSWER || ANSWER=""
 
-            case "$ANSWER" in
-                y|Y|yes|YES|д|Д|да|ДА)
-                    info "IP подтверждён пользователем: $IP"
-                    ;;
-                n|N|no|NO|н|Н|нет|НЕТ)
-                    warning "Пользователь не подтвердил успешный SSH-вход с IP: $IP"
-                    ;;
-                *)
-                    warning "Не удалось подтвердить SSH-вход с IP: $IP"
-                    ;;
-            esac
+            while true; do
+                printf '%s' "Это был ты? (y/n): "
+
+                ANSWER=""
+
+                if ! IFS= read -r ANSWER; then
+                    warning "Не удалось получить ответ для IP: $IP"
+                    break
+                fi
+
+                # Remove leading and trailing whitespace.
+                ANSWER="${ANSWER#"${ANSWER%%[![:space:]]*}"}"
+                ANSWER="${ANSWER%"${ANSWER##*[![:space:]]}"}"
+
+                # Normalize Latin letters. Russian variants are handled below.
+                ANSWER=$(printf '%s' "$ANSWER" | tr '[:upper:]' '[:lower:]')
+
+                case "$ANSWER" in
+                    y|yes|д|Д|да|Да|дА|ДА)
+                        info "IP подтверждён пользователем: $IP"
+                        break
+                        ;;
+
+                    n|no|н|Н|нет|Нет|нЕт|неТ|НЕт|НЕТ)
+                        warning "Пользователь не подтвердил успешный SSH-вход с IP: $IP"
+                        break
+                        ;;
+
+                    *)
+                        echo "[ИНФО] Непонятный ответ. Введи y/yes/д/да или n/no/н/нет."
+                        ;;
+                esac
+            done
         done
     else
         limitation "Не удалось найти записи об успешных SSH-входах. Проверьте доступность и хранение журналов."
@@ -370,25 +401,48 @@ if [ "$WARNINGS" -gt 0 ]; then
     echo "############################################################"
     echo "#             ОБНАРУЖЕНЫ ПРЕДУПРЕЖДЕНИЯ                   #"
     echo "############################################################"
-    echo "Необходимо проверить отмеченные выше события."
-elif [ "$LIMITATIONS" -gt 0 ]; then
+
     echo
-    echo "############################################################"
-    echo "#             ПРОВЕРКА ВЫПОЛНЕНА НЕ ПОЛНОСТЬЮ             #"
-    echo "############################################################"
-    echo "Некоторые проверки не удалось выполнить или их данные ограничены."
+    echo "СПИСОК ОБНАРУЖЕННЫХ ПРОБЛЕМ:"
+    echo
+
+    for i in "${!WARNINGS_LIST[@]}"; do
+        echo "[$((i + 1))] ${WARNINGS_LIST[$i]}"
+    done
+
+    echo
+    echo "Необходимо проверить указанные выше разделы."
 else
     echo
     echo "############################################################"
     echo "#          ПРЕДУПРЕЖДЕНИЙ НЕ ОБНАРУЖЕНО                   #"
     echo "############################################################"
+
     echo "Автоматические проверки не выявили отмеченных предупреждений."
 fi
 
+if [ "$LIMITATIONS" -gt 0 ]; then
+    echo
+    echo "СПИСОК ОГРАНИЧЕНИЙ ПРОВЕРКИ:"
+    echo
+
+    for i in "${!LIMITATIONS_LIST[@]}"; do
+        echo "[$((i + 1))] ${LIMITATIONS_LIST[$i]}"
+    done
+
+    echo
+    echo "Учитывайте ограничения при оценке результатов аудита."
+fi
+
 echo
+echo "============================================================"
+echo " ИНФОРМАЦИЯ ОБ АУДИТЕ"
+echo "============================================================"
+
 echo "Отчёт сохранён: $REPORT"
 echo "Сервер: $(hostname)"
 echo "Дата завершения: $(date -Is)"
+
 echo
 echo "ВАЖНО:"
 echo "- Это предварительный аудит, а не гарантия отсутствия взлома."
